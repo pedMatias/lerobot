@@ -1,0 +1,351 @@
+# Multi SO-101 Follower
+
+A flexible multi-arm configuration for SO-101 follower arms that supports any number of arms working simultaneously. Each arm connects to a separate serial port and can replay the same dataset movements in synchronization.
+
+## Features
+
+- **Flexible number of arms**: Support for 2, 3, 4, or any number of SO-101 arms
+- **Automatic arm naming**: Arms are automatically named `arm1`, `arm2`, `arm3`, etc. based on port order
+- **Single-dataset replay**: All arms can replay the same single-arm dataset simultaneously
+- **Individual calibration**: Each arm maintains its own calibration file
+- **Concurrent control**: All arms execute movements in parallel
+
+## Configuration
+
+### Basic Parameters
+
+- `arm_ports` (required): List of serial port strings for each arm
+  - **Windows**: `["COM3", "COM4", "COM5"]`
+  - **Linux/Mac**: `["/dev/ttyUSB0", "/dev/ttyUSB1", "/dev/ttyUSB2"]`
+- `id` (optional): Robot identifier used for calibration files
+- `disable_torque_on_disconnect` (default: `True`): Disable motor torque when disconnecting
+- `max_relative_target` (optional): Safety limit for relative position changes (float or dict)
+- `use_degrees` (default: `False`): Use degrees instead of normalized position values
+- `cameras` (optional): Dictionary of camera configurations
+
+## Usage Examples
+
+### Replay with 3 Arms
+
+```bash
+lerobot-replay \
+  --robot.type=multi_so101_follower \
+  --robot.arm_ports='["COM3","COM4","COM5"]' \
+  --robot.id=my_multi_follower \
+  --dataset.repo_id=pedMatias/record-test-dance-up-and-down-2 \
+  --dataset.episode=0
+```
+
+### Replay with 2 Arms
+
+```bash
+lerobot-replay \
+  --robot.type=multi_so101_follower \
+  --robot.arm_ports='["COM3","COM4"]' \
+  --robot.id=dual_follower \
+  --dataset.repo_id=your_user/your_dataset \
+  --dataset.episode=0
+```
+
+### Replay with 5 Arms
+
+```bash
+lerobot-replay \
+  --robot.type=multi_so101_follower \
+  --robot.arm_ports='["COM3","COM4","COM5","COM6","COM7"]' \
+  --robot.id=penta_follower \
+  --dataset.repo_id=your_user/your_dataset \
+  --dataset.episode=0
+```
+
+### Replay with Safety Limits
+
+```bash
+lerobot-replay \
+  --robot.type=multi_so101_follower \
+  --robot.arm_ports='["COM3","COM4","COM5"]' \
+  --robot.id=my_multi_follower \
+  --robot.max_relative_target=0.05 \
+  --dataset.repo_id=your_user/your_dataset \
+  --dataset.episode=0
+```
+
+### Linux/Mac Example
+
+```bash
+lerobot-replay \
+  --robot.type=multi_so101_follower \
+  --robot.arm_ports='["/dev/ttyUSB0","/dev/ttyUSB1","/dev/ttyUSB2"]' \
+  --robot.id=my_multi_follower \
+  --dataset.repo_id=your_user/your_dataset \
+  --dataset.episode=0
+```
+
+## Calibration
+
+### First-Time Setup
+
+When you first run with a new robot ID, the system will prompt you to calibrate each arm sequentially:
+
+```
+Calibrating arm1...
+[Follow the calibration prompts for arm1]
+
+Calibrating arm2...
+[Follow the calibration prompts for arm2]
+
+Calibrating arm3...
+[Follow the calibration prompts for arm3]
+```
+
+### Calibration Files
+
+Calibration files are stored individually for each arm:
+- `{calibration_dir}/{id}_arm1.json`
+- `{calibration_dir}/{id}_arm2.json`
+- `{calibration_dir}/{id}_arm3.json`
+
+### Manual Calibration
+
+To recalibrate specific arms, use the calibration command:
+
+```bash
+lerobot-calibrate \
+  --robot.type=multi_so101_follower \
+  --robot.arm_ports='["COM3","COM4","COM5"]' \
+  --robot.id=my_multi_follower
+```
+
+## How It Works
+
+### Arm Naming Convention
+
+Arms are automatically named based on the order of ports provided:
+- First port → `arm1`
+- Second port → `arm2`
+- Third port → `arm3`
+- And so on...
+
+### Motor Features
+
+Each arm's motors are prefixed with the arm name:
+
+**Single SO-101 arm motors:**
+- `shoulder_pan.pos`
+- `shoulder_lift.pos`
+- `elbow_flex.pos`
+- `wrist_flex.pos`
+- `wrist_roll.pos`
+- `gripper.pos`
+
+**Multi-arm motor naming:**
+- `arm1_shoulder_pan.pos`, `arm1_shoulder_lift.pos`, etc.
+- `arm2_shoulder_pan.pos`, `arm2_shoulder_lift.pos`, etc.
+- `arm3_shoulder_pan.pos`, `arm3_shoulder_lift.pos`, etc.
+
+### Single-Dataset Broadcasting
+
+When replaying a single-arm dataset (with unprefixed motor names), the same actions are automatically broadcast to all arms. This means:
+
+1. Dataset recorded with one SO-101 arm has actions like `shoulder_pan.pos`, `gripper.pos`, etc.
+2. Multi-arm robot receives these actions and broadcasts them to all arms
+3. All arms execute the same movements simultaneously
+
+**Example workflow:**
+```
+Dataset action: {shoulder_pan.pos: 0.5, gripper.pos: 0.8, ...}
+                        ↓
+Multi-arm broadcasting splits to:
+  arm1: {shoulder_pan.pos: 0.5, gripper.pos: 0.8, ...}
+  arm2: {shoulder_pan.pos: 0.5, gripper.pos: 0.8, ...}
+  arm3: {shoulder_pan.pos: 0.5, gripper.pos: 0.8, ...}
+                        ↓
+All arms execute the same movement
+```
+
+### Multi-Arm Specific Datasets (Future Use)
+
+If you record a dataset specifically for multi-arm control, you can use arm-prefixed actions:
+
+```python
+{
+  "arm1_shoulder_pan.pos": 0.5,
+  "arm1_gripper.pos": 0.8,
+  "arm2_shoulder_pan.pos": -0.3,
+  "arm2_gripper.pos": 0.2,
+  ...
+}
+```
+
+The system automatically detects prefixed actions and routes them to the appropriate arms.
+
+## Hardware Setup
+
+### Physical Connections
+
+1. **Connect each SO-101 arm to a separate USB port**
+   - Each arm requires its own USB connection
+   - Use quality USB cables to ensure reliable communication
+   - Avoid USB hubs if possible (use direct connections)
+
+2. **Identify serial ports**
+   - **Windows**: Use Device Manager → Ports (COM & LPT) to identify COM ports
+   - **Linux**: Use `ls /dev/ttyUSB*` or `ls /dev/ttyACM*`
+   - **Mac**: Use `ls /dev/tty.usb*`
+
+3. **Note the port for each arm**
+   - Label your arms physically (arm1, arm2, arm3, etc.)
+   - Keep track of which port corresponds to which arm
+   - The order of ports in `arm_ports` determines the arm numbering
+
+### Motor IDs
+
+Each SO-101 arm uses the same motor IDs (1-6):
+1. Shoulder Pan
+2. Shoulder Lift
+3. Elbow Flex
+4. Wrist Flex
+5. Wrist Roll
+6. Gripper
+
+**There are no conflicts** because each arm is on a separate serial bus (different USB port).
+
+### Power Requirements
+
+- Each SO-101 arm needs adequate power supply
+- Ensure your power supplies can handle multiple arms simultaneously
+- Consider the power draw when all motors move at once
+
+## Recording with Multiple Arms
+
+To record a multi-arm dataset from scratch:
+
+```bash
+lerobot-record \
+  --robot.type=multi_so101_follower \
+  --robot.arm_ports='["COM3","COM4","COM5"]' \
+  --robot.id=my_multi_follower \
+  --robot.cameras='{"front": {"type": "opencv", "index_or_path": 0, "width": 640, "height": 480, "fps": 30}}' \
+  --teleop.type=multi_so101_leader \
+  --teleop.arm_ports='["COM6","COM7","COM8"]' \
+  --teleop.id=my_multi_leader \
+  --dataset.repo_id=your_user/multi-arm-dataset \
+  --dataset.num_episodes=10 \
+  --dataset.single_task="Multi-arm coordination task"
+```
+
+**Note**: You'll need to create a `multi_so101_leader` configuration for teleoperation with multiple leader arms.
+
+## Teleoperation with Multiple Arms
+
+To teleoperate multiple arms in real-time:
+
+```bash
+lerobot-teleoperate \
+  --robot.type=multi_so101_follower \
+  --robot.arm_ports='["COM3","COM4","COM5"]' \
+  --robot.id=my_multi_follower \
+  --teleop.type=multi_so101_leader \
+  --teleop.arm_ports='["COM6","COM7","COM8"]' \
+  --teleop.id=my_multi_leader \
+  --display_data=true
+```
+
+## Troubleshooting
+
+### "Invalid choice: 'multi_so101_follower'"
+
+This error means the robot type isn't registered. Make sure:
+1. The imports in `replay.py`, `record.py`, `teleoperate.py`, etc. include `multi_so101_follower`
+2. You're using the latest version of the code
+3. Try reinstalling: `pip install -e .`
+
+### "Port not found" or "Cannot connect to port"
+
+1. **Check port names**: Use Device Manager (Windows) or `ls /dev/tty*` (Linux/Mac)
+2. **Check permissions** (Linux/Mac): `sudo chmod 666 /dev/ttyUSB0`
+3. **Disconnect and reconnect** the USB cables
+4. **Try different USB ports** on your computer
+5. **Check if another program is using the port**
+
+### Arms don't move synchronously
+
+1. **Check FPS settings**: Ensure `--dataset.fps` matches your dataset's recording FPS
+2. **USB bandwidth**: Direct connections are better than USB hubs
+3. **Power supply**: Ensure adequate power for all arms
+4. **Cable quality**: Use high-quality USB cables
+
+### One arm moves differently than others
+
+1. **Calibration issue**: Recalibrate the specific arm
+   ```bash
+   lerobot-calibrate --robot.type=multi_so101_follower --robot.arm_ports='["COM3","COM4","COM5"]' --robot.id=my_multi_follower
+   ```
+2. **Check motor health**: One motor might be damaged or have issues
+3. **Verify motor IDs**: Run motor setup to check IDs
+
+### "Calibration file not found"
+
+This is expected on first run. Follow the calibration prompts for each arm.
+
+## Advanced Usage
+
+### Custom Arm Names
+
+If you need custom arm names instead of arm1, arm2, arm3, you can modify the configuration class and implementation. However, the default naming scheme is recommended for consistency.
+
+### Per-Motor Safety Limits
+
+Set different safety limits for different motors:
+
+```bash
+lerobot-replay \
+  --robot.type=multi_so101_follower \
+  --robot.arm_ports='["COM3","COM4"]' \
+  --robot.id=my_multi_follower \
+  --robot.max_relative_target='{"shoulder_pan": 0.05, "gripper": 0.1}' \
+  --dataset.repo_id=your_user/your_dataset \
+  --dataset.episode=0
+```
+
+### Using Degrees Instead of Normalized Values
+
+```bash
+lerobot-replay \
+  --robot.type=multi_so101_follower \
+  --robot.arm_ports='["COM3","COM4"]' \
+  --robot.id=my_multi_follower \
+  --robot.use_degrees=true \
+  --dataset.repo_id=your_user/your_dataset \
+  --dataset.episode=0
+```
+
+## Technical Details
+
+### Implementation
+
+The multi-SO101 follower is implemented as a wrapper that:
+1. Creates multiple `SO101Follower` instances internally
+2. Routes actions with arm prefixes to the appropriate arm instances
+3. Broadcasts unprefixed actions to all arms
+4. Collects observations from all arms with appropriate prefixes
+5. Handles calibration sequentially for each arm
+
+### Performance Considerations
+
+- **Communication overhead**: Each arm communicates over serial independently
+- **Parallel execution**: Motor commands are sent concurrently to all arms
+- **Observation collection**: Observations are gathered from all arms sequentially
+- **FPS impact**: More arms may slightly reduce effective FPS due to communication overhead
+
+### Source Code
+
+- [config_multi_so101_follower.py](config_multi_so101_follower.py) - Configuration dataclass
+- [multi_so101_follower.py](multi_so101_follower.py) - Main robot implementation
+- [__init__.py](__init__.py) - Module exports
+
+## See Also
+
+- [SO-101 Follower](../so101_follower/) - Single arm configuration
+- [Bi-SO100 Follower](../bi_so100_follower/) - Two-arm SO-100 configuration (similar pattern)
+- [LeRobot Documentation](https://github.com/huggingface/lerobot) - Main project documentation
